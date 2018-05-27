@@ -1,0 +1,19 @@
+{
+  "name": "3d-print-cost",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "body-parser": "latest",
+    "cookie-parser": "~1.4.3",
+    "debug": "~2.6.9",
+    "express": "~4.16.0",
+    "express-fileupload": "^0.4.0",
+    "hbs": "~4.0.1",
+    "http-errors": "~1.6.2",
+    "less-middleware": "~2.2.1",
+    "morgan": "~1.9.0"
+  }
+}
