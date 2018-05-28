@@ -1,24 +1,22 @@
-
 <h1>{{title}}</h1>
 
 <hr>
 
-
+<h3>Select an STL file</h3>
 <form ref='uploadForm'
       id='uploadForm'
       method='post'
       encType="multipart/form-data">
 
-    <input type="file" name="fileObject" />
-    <input id="submitButton" type='submit' value='upload' />
+    <input type="file" id="fileObject"  name="fileObject" />
+    <!-- <input id="submitButton" type='submit' value='upload' /> -->
 </form>
 
 <div id="post-results-container">
 
-    <div class="data">
+    <div class="data data-colour">
 
     </div>
 </div>
-
 
 <script type="text/javascript" src="/javascripts/uploadhandler.js"></script>

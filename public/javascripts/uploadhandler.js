@@ -2,27 +2,33 @@
 
     function init(){
         console.log("button listener set")
-        $('#submitButton').click(submitButtonHandler);
+        //$('#submitButton').click(submitButtonHandler);
+        $('#uploadForm').on('change','#fileObject' , function(){ submitButtonHandler(); });
+
+
     }
 
     function submitButtonHandler (evt) {
-        var testForm = document.getElementById('uploadForm');
-
+/*
         //prevent form submission
         evt.preventDefault();
         evt.stopPropagation();
-
-        $('#post-results-container').fadeOut();
+*/
+        $('#post-results-container').hide();
         $('.ajaxLoader').css('display', 'inline-block');
+
+        var formData = new FormData();
+        formData.append('fileObject', $('input[type=file]')[0].files[0]);
 
 
         //make the AJAX call
         $.ajax({
-            url: '/form',
+            url: '/upload',
             type: 'POST',
-            data: {
-                fileObject: testForm.fileObject.value
-            },
+            method: 'post',
+            data: formData,
+            contentType: false,
+            processData: false,
             success: postSuccessHandler
         });
     }
@@ -42,8 +48,9 @@
             $data.append('<li><b>' +  key + '</b>'   + val + '</li>');
         });
         */
-        console.log(jsonData)
-        //$data.append(jsonData);
+        console.log()
+        var jsonObj = JSON.parse(jsonData);
+        $data.append('<h3>Raw data:</h3><pre>'+JSON.stringify(jsonObj, undefined, 2)+'</pre>');
 
         $('#post-results-container').fadeIn();
     };
