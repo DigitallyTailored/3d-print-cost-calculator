@@ -1,0 +1,26 @@
+{
+  "currency": "GBP",
+  "currencySymbol": "£",
+  "chargeBase": 0,
+  "chargePercent": 0,
+  "printer": {
+    "0" : 406,
+	"1" : 355,
+	"2" : 406
+  }
+  "fdm": {
+    "mm": 0.108,
+    "cm": 1.08,
+    "inch": 2.7432
+  }
+  "sla": {
+    "mm": 0.108,
+    "cm": 1.08,
+    "inch": 2.7432
+  }
+  "polyjet": {
+    "mm": 0.108,
+    "cm": 1.08,
+    "inch": 2.7432
+  }
+}

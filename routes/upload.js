@@ -1,13 +1,19 @@
 var express = require('express');
 var router = express.Router();
+
+//uploaded file handling
 var fileUpload = require('express-fileupload');
+
+//STL file parsing
 var parseSTL = require('parse-stl');
 var FS = require('fs');
 
-router.use(fileUpload());
+//server variable storage for prices
+var Store = require('data-store');
+var store = new Store('prices', { base: '.'});
 
+router.use(fileUpload());
 var fileUploadIteration = 0;
-var timeStart = 0;
 
 function signedVolumeOfTriangle(p1,p2,p3){
     var v321 = p3.x*p2.y*p1.z;
@@ -22,7 +28,8 @@ function signedVolumeOfTriangle(p1,p2,p3){
 
 /* POST upload page page. */
 router.post('/upload', function(req, res, next) {
-    timeStart = +new Date();
+
+    var timeStart = +new Date();
 
     //uploaded alright?
     if (!req.files){
@@ -31,7 +38,6 @@ router.post('/upload', function(req, res, next) {
         }));
         return;
     }
-
 
     //grab the stl file name
     var fileObject = req.files.fileObject;
@@ -55,12 +61,14 @@ router.post('/upload', function(req, res, next) {
 
         var mesh = parseSTL(buf);
         var positions = mesh.positions;
+        var triangles = positions.length;
 
-        var vol = 0;
+        //calculations against parsed mesh data
+        var volUnits = 0;
         var d = [];
-        d[0] = {low: 0, high:0};
-        d[1] = {low: 0, high:0};
-        d[2] = {low: 0, high:0};
+        d[0] = {bottom: 0, top:0}; //x
+        d[1] = {bottom: 0, top:0}; //y
+        d[2] = {bottom: 0, top:0}; //z
 
         for(var i=0;i<positions.length; i+=3)
         {
@@ -79,28 +87,57 @@ router.post('/upload', function(req, res, next) {
             t3.y = positions[i+2][1];
             t3.z = positions[i+2][2];
 
-            vol += signedVolumeOfTriangle(t1,t2,t3);
+            //turn up the volume
+            volUnits += signedVolumeOfTriangle(t1,t2,t3);
 
             //get maximum vertex range to calculate bounding box
             for(var j=0;j<3;j++){
-                //this is assuming that each corner is at some point a 'leading' one..
-                //todo read up on whether each corner has it's own STL loop
-                if (d[j].high < positions[i+0][j]){
-                    d[j].high = positions[i+0][j]
-                }
-                if (d[j].low > positions[i+0][j]){
-                    d[j].low = positions[i+0][j]
+                for(var k=0;k<3;k++) {
+                    if (d[j].top < positions[i + k][j]) {
+                        d[j].top = positions[i + k][j]
+                    }
+                    if (d[j].bottom > positions[i + k][j]) {
+                        d[j].bottom = positions[i + k][j]
+                    }
                 }
             }
 
         }
 
+
+        //get extra variables from request
+        var unitChoice = req.body.unitChoice;
+        var materialChoice = req.body.materialChoice;
+        var unitCharge = store.get(materialChoice+'.'+unitChoice);
+        var currency = store.get("currency");
+        var currencySymbol = store.get("currencySymbol");
+        var chargeBase = store.get("chargeBase");
+        var chargePercent = store.get("chargePercent");
+
+        //cost calculation
+        var volCharge = volUnits * unitCharge;
+
+        //add base charges
+        volCharge += volCharge*chargePercent; //add percentage of cost charge
+        volCharge += chargeBase; //add base charge
+
+        //pretty print
+        var volUnitsFull = volUnits + ' '+unitChoice+'<sup>3</sup>';
+
+        //send all data to clientside to show calculation
         res.send(JSON.stringify({
-            information: "file uploaded",
+            information: "file processed",
             timeMS: new Date() - timeStart,
-            filename: fileObjectServer,
+            serverFilename: fileObjectServer,
+            unitChoice: unitChoice,
+            unitCharge: unitCharge,
+            chargeBase: chargeBase,
+            chargePercent: chargePercent,
             volume: vol,
-            dimensionsMax: d
+            triangles: triangles/3,
+            volumeUnits: volUnitsFull,
+            dimensionsMax: d,
+            volCharge: volCharge
         }));
 
     });

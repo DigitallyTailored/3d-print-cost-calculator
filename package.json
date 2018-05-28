@@ -8,6 +8,7 @@
   "dependencies": {
     "body-parser": "latest",
     "cookie-parser": "~1.4.3",
+    "data-store": "^3.0.0",
     "debug": "~2.6.9",
     "express": "~4.16.0",
     "express-fileupload": "^0.4.0",
