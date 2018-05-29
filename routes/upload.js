@@ -188,7 +188,7 @@ router.post('/upload', function(req, res, next) {
             unitChoiceCost: currencySymbol+unitCharge,
             chargeAddBase: currencySymbol+chargeAddBase,
             chargeAddPercent: chargeAddPercent+"%",
-            chargeTotal: chargeTotal
+            chargeTotal: currencySymbol+chargeTotal
         }));
 
         store.set('fileUploadIteration', fileUploadIteration);
