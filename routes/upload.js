@@ -8,19 +8,23 @@ const fileUpload = require('express-fileupload');
 const parseSTL = require('parse-stl');
 const FS = require('fs');
 
-//server variable storage for prices
+//server variable storage setup
 const Store = require('data-store');
-const store = new Store('prices', { base: '.'});
+const store = new Store('variables', { base: '.'});
 
-//validate against size of print bed
+//grab server variables at startup to save memory allocation time
 const printer = store.get('printer');
 const currency = store.get("currency");
 const currencySymbol = store.get("currencySymbol");
 const chargeAddBase = store.get("chargeBase");
 const chargeAddPercent = store.get("chargePercent");
+if(store.get('fileUploadIteration')) {
+    var fileUploadIteration = store.get('fileUploadIteration');
+} else {
+    var fileUploadIteration = 0;
+}
 
-//setup variables which don't change to save memory allocation (time)
-//used for quickly converting upload model measurement to mm; used for comparing against print bed size
+//used for quickly converting upload model measurement to mm, comparing against print bed size
 const convert = {
     "mm": {
         "mm": 1,
@@ -41,12 +45,7 @@ const convert = {
 
 router.use(fileUpload());
 
-if(store.get('iteration')) {
-    var fileUploadIteration = store.get('fileUploadIteration');
-} else {
-    var fileUploadIteration = 0;
-}
-
+//function used for calculating volume
 function signedVolumeOfTriangle(p1,p2,p3){
     var v321 = p3.x*p2.y*p1.z;
     var v231 = p2.x*p3.y*p1.z;
@@ -58,13 +57,13 @@ function signedVolumeOfTriangle(p1,p2,p3){
 }
 
 
-/* POST upload page page. */
+/* POST upload page. */
 router.post('/upload', function(req, res, next) {
 
     var timeStart = +new Date();
     var clientFeedback='';
 
-    //uploaded alright?
+    //file uploaded alright?
     if (!req.files){
         res.send(JSON.stringify({
             information: "file upload failed."
@@ -72,11 +71,10 @@ router.post('/upload', function(req, res, next) {
         return;
     }
 
-    //grab the stl file name
     var fileObject = req.files.fileObject;
 
     //todo move this to after file processing if possible to speedup valuation time
-    //store copy of file on server
+    //store copy of file on server for quote reference
     var filenameServer = 'uploads\\file-'+fileUploadIteration+'.stl';
     fileObject.mv(filenameServer, function(err) {
         if (err){
@@ -89,7 +87,7 @@ router.post('/upload', function(req, res, next) {
 
         fileUploadIteration++;
 
-        //parse the file
+        //parse the stl file
         var buf = FS.readFileSync(filenameServer);
 
         var mesh = parseSTL(buf);
@@ -147,17 +145,16 @@ router.post('/upload', function(req, res, next) {
 
         objectVolume =objectVolume*0.001;
 
-        //file passed all validation and was read, so now setting/getting vars (if we'd fail the above then no need to do the below)
+		
+        //file passed all validation and was read, so now setting/getting runtime vars (if we'd fail the above then no need to do the below)
         //collect additional passed/set vars
         var unitChoice = req.body.unitChoice;
         var materialChoice = req.body.materialChoice;
         //get cost calculation variables from request and storage
         var unitCharge = store.get(materialChoice+'.'+unitChoice);
 
-        //convert stored dimensions max to mm because we use them in a couple of places
+		//calculate object box against printbed
         for(var i=0;i<3;i++){
-            //dimensions[i].top = convert[unitChoice]['mm'] * dimensions[i].top;
-            //dimensions[i].bottom =convert[unitChoice]['mm'] * dimensions[i].bottom;
             dimensions[i].diff = dimensions[i].top-(dimensions[i].bottom);
         }
         for(var i=0;i<3;i++){
@@ -167,7 +164,7 @@ router.post('/upload', function(req, res, next) {
             }
         }
 
-        //cost calculation
+        //cost calculation based on object
         var chargeTotal = objectVolume * unitCharge;
 
         //add base charges
@@ -193,7 +190,7 @@ router.post('/upload', function(req, res, next) {
         }));
 
         store.set('fileUploadIteration', fileUploadIteration);
-
+		
     });
 
 
