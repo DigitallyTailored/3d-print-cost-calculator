@@ -1,7 +1,7 @@
 (function () {
 
     function init(){
-        console.log("button listener set")
+        console.log("button listener set");
         $('#uploadForm').on('change','#fileObject' , function(){ submitButtonHandler(); });
         $('#post-results-container').hide();
     }
@@ -36,7 +36,6 @@
         $data.html('');
         $('#jobCost').html('');
 
-        console.log()
         var jsonObj = JSON.parse(jsonData);
 
         //update display with data

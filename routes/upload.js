@@ -10,7 +10,7 @@ const FS = require('fs');
 
 //server variable storage setup
 const Store = require('data-store');
-const store = new Store('variables', { base: '.'});
+var store = new Store('variables', { base: '.'});
 
 //grab server variables at startup to save memory allocation time
 const printer = store.get('printer');
@@ -18,10 +18,11 @@ const currency = store.get("currency");
 const currencySymbol = store.get("currencySymbol");
 const chargeAddBase = store.get("chargeBase");
 const chargeAddPercent = store.get("chargePercent");
+var fileUploadIteration;
 if(store.get('fileUploadIteration')) {
-    var fileUploadIteration = store.get('fileUploadIteration');
+    fileUploadIteration = store.get('fileUploadIteration');
 } else {
-    var fileUploadIteration = 0;
+    fileUploadIteration = 0;
 }
 
 //used for quickly converting upload model measurement to mm, comparing against print bed size
@@ -41,7 +42,7 @@ const convert = {
         "cm": 2.54,
         "inch": 1
     }
-}
+};
 
 router.use(fileUpload());
 
@@ -151,6 +152,7 @@ router.post('/upload', function(req, res, next) {
         var unitChoice = req.body.unitChoice;
         var materialChoice = req.body.materialChoice;
         //get cost calculation variables from request and storage
+        var unitCharge = store.get('currencySymbol');
         var unitCharge = store.get(materialChoice+'.'+unitChoice);
 
 		//calculate object box against printbed
@@ -170,7 +172,7 @@ router.post('/upload', function(req, res, next) {
         //add base charges
         chargeTotal += chargeTotal*chargeAddPercent; //add percentage of cost charge
         chargeTotal += chargeAddBase; //add base charge
-        chargeTotal = chargeTotal.toFixed(2)
+        chargeTotal = chargeTotal.toFixed(2);
 
         //send all data to clientside to show calculation
         res.send(JSON.stringify({
