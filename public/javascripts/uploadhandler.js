@@ -34,11 +34,18 @@
 
         //reset the UI
         $data.html('');
+        $('#jobCost').html('');
 
         console.log()
         var jsonObj = JSON.parse(jsonData);
-        $data.append('<h3>Raw data:</h3><pre>'+JSON.stringify(jsonObj, undefined, 2)+'</pre>');
 
+        //update display with data
+        $data.append('<h3>Raw data:</h3><pre>'+JSON.stringify(jsonObj, undefined, 2)+'</pre>');
+        if(jsonObj.success){
+            $('#jobCost').html(jsonObj.chargeTotal);
+        }
+
+        //show the display
         $('#post-results-container').fadeIn();
     };
 

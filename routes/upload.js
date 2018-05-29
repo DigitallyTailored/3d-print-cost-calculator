@@ -1,19 +1,51 @@
-var express = require('express');
-var router = express.Router();
+const express = require('express');
+const router = express.Router();
 
 //uploaded file handling
-var fileUpload = require('express-fileupload');
+const fileUpload = require('express-fileupload');
 
 //STL file parsing
-var parseSTL = require('parse-stl');
-var FS = require('fs');
+const parseSTL = require('parse-stl');
+const FS = require('fs');
 
 //server variable storage for prices
-var Store = require('data-store');
-var store = new Store('prices', { base: '.'});
+const Store = require('data-store');
+const store = new Store('prices', { base: '.'});
+
+//validate against size of print bed
+const printer = store.get('printer');
+const currency = store.get("currency");
+const currencySymbol = store.get("currencySymbol");
+const chargeAddBase = store.get("chargeBase");
+const chargeAddPercent = store.get("chargePercent");
+
+//setup variables which don't change to save memory allocation (time)
+//used for quickly converting upload model measurement to mm; used for comparing against print bed size
+const convert = {
+    "mm": {
+        "mm": 1,
+        "cm": 0.1,
+        "inch": 0.03937
+    },
+    "cm": {
+        "mm": 10,
+        "cm": 1,
+        "inch": 0.3937
+    },
+    "inch": {
+        "mm": 25.4,
+        "cm": 2.54,
+        "inch": 1
+    }
+}
 
 router.use(fileUpload());
-var fileUploadIteration = 0;
+
+if(store.get('iteration')) {
+    var fileUploadIteration = store.get('fileUploadIteration');
+} else {
+    var fileUploadIteration = 0;
+}
 
 function signedVolumeOfTriangle(p1,p2,p3){
     var v321 = p3.x*p2.y*p1.z;
@@ -30,6 +62,7 @@ function signedVolumeOfTriangle(p1,p2,p3){
 router.post('/upload', function(req, res, next) {
 
     var timeStart = +new Date();
+    var clientFeedback='';
 
     //uploaded alright?
     if (!req.files){
@@ -44,8 +77,8 @@ router.post('/upload', function(req, res, next) {
 
     //todo move this to after file processing if possible to speedup valuation time
     //store copy of file on server
-    var fileObjectServer = 'uploads\\file-'+fileUploadIteration+'.stl';
-    fileObject.mv(fileObjectServer, function(err) {
+    var filenameServer = 'uploads\\file-'+fileUploadIteration+'.stl';
+    fileObject.mv(filenameServer, function(err) {
         if (err){
             res.send(JSON.stringify({
                 information: "file move on server failed: "+ err,
@@ -57,20 +90,28 @@ router.post('/upload', function(req, res, next) {
         fileUploadIteration++;
 
         //parse the file
-        var buf = FS.readFileSync(fileObjectServer);
+        var buf = FS.readFileSync(filenameServer);
 
         var mesh = parseSTL(buf);
         var positions = mesh.positions;
-        var triangles = positions.length;
+        var objectPolygons = positions.length;
+        if (!objectPolygons > 0){
+            res.send(JSON.stringify({
+                information: "file appears to be empty",
+            }));
 
-        //calculations against parsed mesh data
-        var volUnits = 0;
-        var d = [];
-        d[0] = {bottom: 0, top:0}; //x
-        d[1] = {bottom: 0, top:0}; //y
-        d[2] = {bottom: 0, top:0}; //z
+            return;
+        }
 
-        for(var i=0;i<positions.length; i+=3)
+        //calculations against newly parsed mesh data
+        var objectVolume = 0;
+        var dimensionSet = {bottom: 0, top:0, diff: 0};
+        var dimensions = [];
+        dimensions[0] = dimensionSet; //x
+        dimensions[1] = dimensionSet; //y
+        dimensions[2] = dimensionSet; //z
+
+        for(var i=0;i<objectPolygons; i+=3)
         {
             var t1 = {};
             t1.x = positions[i+0][0];
@@ -88,57 +129,70 @@ router.post('/upload', function(req, res, next) {
             t3.z = positions[i+2][2];
 
             //turn up the volume
-            volUnits += signedVolumeOfTriangle(t1,t2,t3);
+            objectVolume += signedVolumeOfTriangle(t1,t2,t3);
 
             //get maximum vertex range to calculate bounding box
             for(var j=0;j<3;j++){
                 for(var k=0;k<3;k++) {
-                    if (d[j].top < positions[i + k][j]) {
-                        d[j].top = positions[i + k][j]
+                    if (dimensions[j].top < positions[i + k][j]) {
+                        dimensions[j].top = positions[i + k][j]
                     }
-                    if (d[j].bottom > positions[i + k][j]) {
-                        d[j].bottom = positions[i + k][j]
+                    if (dimensions[j].bottom > positions[i + k][j]) {
+                        dimensions[j].bottom = positions[i + k][j]
                     }
                 }
             }
 
         }
 
+        objectVolume =objectVolume*0.001;
 
-        //get extra variables from request
+        //file passed all validation and was read, so now setting/getting vars (if we'd fail the above then no need to do the below)
+        //collect additional passed/set vars
         var unitChoice = req.body.unitChoice;
         var materialChoice = req.body.materialChoice;
+        //get cost calculation variables from request and storage
         var unitCharge = store.get(materialChoice+'.'+unitChoice);
-        var currency = store.get("currency");
-        var currencySymbol = store.get("currencySymbol");
-        var chargeBase = store.get("chargeBase");
-        var chargePercent = store.get("chargePercent");
+
+        //convert stored dimensions max to mm because we use them in a couple of places
+        for(var i=0;i<3;i++){
+            //dimensions[i].top = convert[unitChoice]['mm'] * dimensions[i].top;
+            //dimensions[i].bottom =convert[unitChoice]['mm'] * dimensions[i].bottom;
+            dimensions[i].diff = dimensions[i].top-(dimensions[i].bottom);
+        }
+        for(var i=0;i<3;i++){
+            // var d[i].top-(d[i].bottom)
+            if( convert[unitChoice]['mm'] * dimensions[i].diff > printer[i]){
+                clientFeedback += "<br>Object larger than print bed on dimension "+ i+" ("+(convert[unitChoice]['mm'] * dimensions[i].diff)+"mm > "+printer[i]+"mm)";
+            }
+        }
 
         //cost calculation
-        var volCharge = volUnits * unitCharge;
+        var chargeTotal = objectVolume * unitCharge;
 
         //add base charges
-        volCharge += volCharge*chargePercent; //add percentage of cost charge
-        volCharge += chargeBase; //add base charge
-
-        //pretty print
-        var volUnitsFull = volUnits + ' '+unitChoice+'<sup>3</sup>';
+        chargeTotal += chargeTotal*chargeAddPercent; //add percentage of cost charge
+        chargeTotal += chargeAddBase; //add base charge
+        chargeTotal = chargeTotal.toFixed(2)
 
         //send all data to clientside to show calculation
         res.send(JSON.stringify({
-            information: "file processed",
-            timeMS: new Date() - timeStart,
-            serverFilename: fileObjectServer,
+            success: true,
+            processInformation: "file processed" + clientFeedback,
+            processTimeMS: new Date() - timeStart,
+            processServerFilename: filenameServer,
+            objectVolume: objectVolume,
+            objectPolygons: objectPolygons/3,
+            objectVolumeUnits: objectVolume + ' '+unitChoice+'<sup>3</sup>',
+            objectDimensionsMM: dimensions,
             unitChoice: unitChoice,
-            unitCharge: unitCharge,
-            chargeBase: chargeBase,
-            chargePercent: chargePercent,
-            volume: vol,
-            triangles: triangles/3,
-            volumeUnits: volUnitsFull,
-            dimensionsMax: d,
-            volCharge: volCharge
+            unitChoiceCost: currencySymbol+unitCharge,
+            chargeAddBase: currencySymbol+chargeAddBase,
+            chargeAddPercent: chargeAddPercent+"%",
+            chargeTotal: chargeTotal
         }));
+
+        store.set('fileUploadIteration', fileUploadIteration);
 
     });
 
